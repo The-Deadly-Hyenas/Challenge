@@ -8,6 +8,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import SelectKBest, f_classif
 from imblearn.combine import SMOTEENN
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.metrics import classification_report
 
 df: pd.DataFrame = pd.read_pickle(
     "../training_data/task_3_training_e8da4715deef7d56_f8b7378_pandas.pkl").reset_index()
@@ -103,8 +104,20 @@ class GBDT:
         # Set Model
         self.model = gridSearchModel
 
-        print(blue(f"\n:: Trainingset Score\t\t\t\t\t{self.model.score(self.X_train, self.y_train)}"))
-        print(blue(f":: Testset Score (Segment-ID: 26)\t\t{self.model.score(self.X_test, self.y_test)}"))
+        print(green(f"\n:: Best Parameters") + f"\t\t\t\t\t\t{self.model.best_params_}")
+        print(green(f":: Trainingset Score)") + f"\t\t\t\t\t{self.model.score(self.X_train, self.y_train)}")
+        print(green(f":: Testset Score (Segment-ID: 26)") + f"\t\t{self.model.score(self.X_test, self.y_test)}")
+
+        means = self.model.cv_results_["mean_test_score"]
+        stds = self.model.cv_results_["std_test_score"]
+
+        print(green("\n:: GridSearch Results: "))
+        for mean, std, params in zip(means, stds, self.model.cv_results_["params"]):
+            print("   %0.3f (+/-%0.03f) for %r" % (mean, std * 2, params))
+
+        print(green(f"\n:: Classification Report: "))
+        y_true, y_pred = self.y_test, self.model.predict(self.X_test)
+        print(classification_report(y_true, y_pred, zero_division=1))
 
     def test_model(self):
         """
@@ -113,6 +126,7 @@ class GBDT:
         """
         # load test dataset and transform
         test_data = pd.read_pickle("../test_data/task_4_test_dd4bd32b08b776e6_daf99ad_pandas.pkl").reset_index()
+
         test_features = test_data.loc[:, "essentia_dissonance_mean":]
         test_features_std = StandardScaler().fit_transform(test_features)
         test_features = pd.DataFrame(test_features_std, columns=test_features.columns)
@@ -131,16 +145,17 @@ class GBDT:
         # create dataframe with results and save to csv
         results = test_data.loc[:, "pianist_id":"snippet_id"]
         results["quadrant"] = predicted.astype(int)
+
         results.to_csv("results_gbdt.csv", index=False)
 
 
 if __name__ == "__main__":
 
-    params = {"n_estimators": [115],
+    params = {"n_estimators": [100, 123, 125],
               "learning_rate": [0.01],
-              "min_samples_leaf": [130],
-              "max_depth": [15]}
+              "min_samples_leaf": [110, 115],
+              "max_depth": [10, 11, 12]}
 
     GBDT = GBDT(params=params)
     GBDT.train_model()
-    # GBDT.test_model()
+    GBDT.test_model()
