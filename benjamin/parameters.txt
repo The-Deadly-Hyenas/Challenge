@@ -1,0 +1,15 @@
+:: Best Parameters						{'learning_rate': 0.01, 'max_depth': 11, 'min_samples_leaf': 110, 'n_estimators': 124, 'subsample': 0.5}
+:: Trainingset Score)					0.6846846846846847
+:: Testset Score (Segment-ID: 26)		0.5232558139534884
+
+:: Best Parameters						{'learning_rate': 0.01, 'max_depth': 25, 'min_samples_leaf': 90, 'n_estimators': 123, 'subsample': 0.5}
+:: Trainingset Score)					0.7007007007007007
+:: Testset Score (Segment-ID: 26)		0.5232558139534884
+
+:: Best Parameters						{'learning_rate': 0.01, 'max_depth': 25, 'min_samples_leaf': 90, 'n_estimators': 123, 'subsample': 0.45}
+:: Trainingset Score)					0.6926926926926927
+:: Testset Score (Segment-ID: 26)		0.5465116279069767
+
+:: Best Parameters						{'learning_rate': 0.01, 'max_depth': 10, 'min_impurity_decrease': 10, 'min_samples_leaf': 110, 'n_estimators': 123, 'subsample': 0.45}
+:: Trainingset Score)					0.6036036036036037
+:: Testset Score (Segment-ID: 26)		0.627906976744186

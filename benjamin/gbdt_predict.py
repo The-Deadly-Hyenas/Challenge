@@ -3,15 +3,43 @@ import numpy as np
 from tqdm import tqdm
 from simple_colors import *
 
+from imblearn.combine import SMOTEENN
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import SelectKBest, f_classif
-from imblearn.combine import SMOTEENN
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import classification_report
 
 df: pd.DataFrame = pd.read_pickle(
     "../training_data/task_3_training_e8da4715deef7d56_f8b7378_pandas.pkl").reset_index()
+
+
+def revenue_gain(y_true, y_pred):
+    """
+    Return the score according to the Estimated revenues/ fitmotion gain matrix
+    from the slides. Faster than the revenue_challenge.py function.
+    labels: 1="happy", 2="angry", 3="sad", 4="relaxed"
+    for sklearn use this:
+        from sklearn.metrics import make_scorer
+        score = make_scorer(revenue_gain, greater_is_better=True)
+        score(classifier, X, y) # same as revenue_gain(y, classifier.predict(X))
+
+    :param y_true: true labels as numpy array of int
+    :param y_pred: predicted labels as numpy array of int
+    :return: accumulates score over all predictions
+    """
+    # convert to int and remove 1 to use as index for gain_matrix
+    y_true = y_true.astype(int) - 1
+    y_pred = y_pred.astype(int) - 1
+
+    gain_matrix = np.array([[5, -5, -5, 2],
+                            [-5, 10, 2, -5],
+                            [-5, 2, 10, -5],
+                            [2, -5, -2, 5]])
+
+    revenue = gain_matrix[y_true, y_pred].sum()
+
+    return revenue
 
 
 class GBDT:
@@ -151,10 +179,12 @@ class GBDT:
 
 if __name__ == "__main__":
 
-    params = {"n_estimators": [100, 123, 125],
+    params = {"n_estimators": [110],
               "learning_rate": [0.01],
-              "min_samples_leaf": [110, 115],
-              "max_depth": [10, 11, 12]}
+              "min_samples_leaf": [110],
+              "min_impurity_decrease": [11],
+              "max_depth": [50],
+              "subsample": [0.45]}
 
     GBDT = GBDT(params=params)
     GBDT.train_model()
