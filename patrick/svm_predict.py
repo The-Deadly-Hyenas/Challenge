@@ -112,7 +112,7 @@ class SVM:
         X_resampled = X_resampled.drop(["segment_id"], axis=1)
 
         # Select Best Features
-        best_features = SelectKBest(score_func=f_classif, k=17).fit(X_resampled, y_resampled).get_feature_names_out()
+        best_features = SelectKBest(score_func=f_classif, k=12).fit(X_resampled, y_resampled).get_feature_names_out()
 
         self.cv = cv
 
@@ -193,13 +193,13 @@ class SVM:
 
 if __name__ == "__main__":
 
-    params = {"C": [0.25, 0.5, 1],
-              "kernel": ['linear', 'poly', 'rbf'],
-              "degree": [2, 3],
+    params = {"C": [0.25],  # [0.25, 0.5, 1],
+              "kernel": ['poly'],  # ['linear', 'poly', 'rbf'],
+              "degree": [2, 3, 4, 5],
               "gamma": ['scale', 'auto'],
               "shrinking": [True, False],
               "probability": [True, False],
-              "cache_size": [200, 500, 1000],
+              "cache_size": [200],  # , [500, 1000],
               "break_ties": [True, False]}
 
     SVM = SVM(params=params)
