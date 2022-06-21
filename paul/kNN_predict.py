@@ -1,97 +1,170 @@
 import pandas as pd
-import numpy as np
+from tqdm import tqdm
+from simple_colors import *
+
+from imblearn.combine import SMOTEENN
 from sklearn.preprocessing import StandardScaler
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import SelectKBest, f_classif
-from imblearn.combine import SMOTEENN
+from sklearn.metrics import classification_report
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import make_scorer
 from score_function import revenue_gain
 
-# load the data and reset index of dataframe
-df: pd.DataFrame = pd.read_pickle("../training_data/task_3_training_e8da4715deef7d56_f8b7378_pandas.pkl").reset_index()
-
-# get only the low and mid level features + segment_id
-X = df.loc[:, "essentia_dissonance_mean":"mirtoolbox_roughness_pct_90"]
-# target value
-y = df["quadrant"]
-
-# preprocess dataset
-X_std = StandardScaler().fit_transform(X)
-X = pd.DataFrame(X_std, columns=X.columns)
-
-# add segment_id to data for filtering segments
-X["segment_id"] = df["segment_id"]
-
-# remove segment_id 26 and keep as test/ eval data for later
-seg_26_indices = (X["segment_id"] == 26)
-X_test = X[seg_26_indices].drop(["segment_id"], axis=1)
-y_test = y[seg_26_indices]
-
-X_train = X.drop(X[seg_26_indices].index, axis=0).reset_index(drop=True)
-y_train = y.drop(X[seg_26_indices].index, axis=0)
-
-# Combination of over- and under-sampling
-# https://imbalanced-learn.org/stable/combine.html
-smote_enn = SMOTEENN(random_state=0)
-X_resampled, y_resampled = smote_enn.fit_resample(X_train, y_train)
-# X_resampled, y_resampled = X_train, y_train
+df: pd.DataFrame = pd.read_pickle(
+    "../training_data/task_3_training_e8da4715deef7d56_f8b7378_pandas.pkl").reset_index()
 
 
-# split the data according to segment_id
-# store the splits as tuple (train indices, test_indices)
-# 2 segments for test, the rest for training (not including segment 26)
-cv = []
+class KNN:
 
-for i in range(24):
-    train_indices = X_resampled[~X_resampled["segment_id"].isin([i, i + 1])].index.to_list()
-    test_indices = X_resampled[X_resampled["segment_id"].isin([i, i + 1])].index.to_list()
-    cv.append((train_indices, test_indices))
+    def __init__(self, params):
+        """
+        Default Parameters
+        :param params:
+        """
+        self.params = params
 
-# remove the segment_id as we don't want it in the training data
-X_resampled = X_resampled.drop(["segment_id"], axis=1)
+        self.X = None
+        self.y = None
 
-# select k best features according to ANOVA F-value between label/feature (for classification tasks)
-best_features = SelectKBest(score_func=f_classif, k=15).fit(X_resampled, y_resampled).get_feature_names_out()
-X_select = X_resampled[best_features]
+        self.X_train = None
+        self.y_train = None
+        self.X_test = None
+        self.y_test = None
 
-# parameters for grid search
-params = {
-    "n_neighbors": [77],
-    "weights": ["uniform"],  # {‘uniform’, ‘distance’}
-    "algorithm": ["auto"],  # {‘auto’, ‘ball_tree’, ‘kd_tree’, ‘brute’}
-}
+        self.model = None
+        self.cv = None
 
-gs_cv = GridSearchCV(KNeighborsClassifier(),
-                     params,
-                     cv=cv,
-                     return_train_score=True,
-                     n_jobs=-1,
-                     scoring=make_scorer(revenue_gain, greater_is_better=True))
+    def preprocessing(self):
+        """
+        Performe Dataset Pre-Processing and Cross-Validation
+        :return:
+        """
+        # Load Training Dataset (Low-Level Features and Mid-Level Features)
+        X = df.loc[:, "essentia_dissonance_mean":"mirtoolbox_roughness_pct_90"]
+        y = df["quadrant"]
 
-gs_cv.fit(X_select, y_resampled)
-print(gs_cv.best_score_, gs_cv.best_params_)
+        # Dataset Pre-Processing
+        X_std = StandardScaler().fit_transform(X)
+        X = pd.DataFrame(X_std, columns=X.columns)
 
-############################################################################################################
-# load test dataset and transform
-test_data = pd.read_pickle("../test_data/task_4_test_dd4bd32b08b776e6_daf99ad_pandas.pkl").reset_index()
-test_features = test_data.loc[:, "essentia_dissonance_mean":]
-test_features_std = StandardScaler().fit_transform(test_features)
-test_features = pd.DataFrame(test_features_std, columns=test_features.columns)
+        # add segment_id to training data for doing the cross validation splits
+        X["segment_id"] = df["segment_id"]
+
+        # remove segment_id 26
+        seg_26_indices = (X["segment_id"] == 26)
+        X_test = X[seg_26_indices].drop(["segment_id"], axis=1)
+        y_test = y[seg_26_indices]
+
+        X_train = X.drop(X[seg_26_indices].index, axis=0).reset_index(drop=True)
+        y_train = y.drop(X[seg_26_indices].index, axis=0)
+
+        # SMOTEENN
+        # https://imbalanced-learn.org/stable/combine.html
+        smote_enn = SMOTEENN(random_state=0)
+        X_resampled, y_resampled = smote_enn.fit_resample(X_train, y_train)
+
+        # CROSS-VALIDATION
+        cv = []
+        for i in tqdm(range(24), total=len(range(24)), desc=":: Cross-Validation"):
+            train_indices = X_resampled[~X_resampled["segment_id"].isin([i, i + 1])].index.to_list()
+            test_indices = X_resampled[X_resampled["segment_id"].isin([i, i + 1])].index.to_list()
+            cv.append((train_indices, test_indices))
+
+        # Drop Segment-ID
+        X_resampled = X_resampled.drop(["segment_id"], axis=1)
+
+        # Select Best Features
+        best_features = SelectKBest(score_func=f_classif, k=17).fit(X_resampled, y_resampled).get_feature_names_out()
+
+        self.cv = cv
+
+        self.X = X
+        self.y = y
+
+        self.X_train = X_resampled[best_features]
+        self.y_train = y_resampled
+
+        self.X_test = X_test[best_features]
+        self.y_test = y_test
+
+    def train_model(self):
+        """
+        Select model from model class
+        :return:
+        """
+
+        print(green(":: Starting Preprocessing"))
+        # Dataset Preprocessing
+        self.preprocessing()
+        print(green(":: Finished Preprocessing"))
+
+        # gridSearchModel = GridSearchCV(KNeighborsClassifier(), self.params, cv=self.cv, n_jobs=-1)
+        gridSearchModel = GridSearchCV(KNeighborsClassifier(), self.params, cv=self.cv, n_jobs=-1,
+                                       scoring=make_scorer(revenue_gain, greater_is_better=True))
+
+        gridSearchModel.fit(self.X_train, self.y_train)
+
+        # Set Model
+        self.model = gridSearchModel
+
+        print(green(f"\n:: Best Parameters") + f"\t\t\t\t\t\t{self.model.best_params_}")
+        print(green(f":: Trainingset Score)") + f"\t\t\t\t\t{self.model.score(self.X_train, self.y_train)}"
+                                                f" out of {revenue_gain(self.y_train, self.y_train)}")
+        print(green(f":: Testset Score (Segment-ID: 26)") + f"\t\t{self.model.score(self.X_test, self.y_test)} "
+                                                            f" out of {revenue_gain(self.y_test, self.y_test)}")
+
+        means = self.model.cv_results_["mean_test_score"]
+        stds = self.model.cv_results_["std_test_score"]
+
+        print(green("\n:: GridSearch Results: "))
+        for mean, std, params in zip(means, stds, self.model.cv_results_["params"]):
+            print("   %0.3f (+/-%0.03f) for %r" % (mean, std * 2, params))
+
+        print(green(f"\n:: Classification Report: "))
+        y_true, y_pred = self.y_test, self.model.predict(self.X_test)
+        print(classification_report(y_true, y_pred, zero_division=1))
+
+        print(green(f"\n:: Achieved Score and revenue: "))
+        print(f'Revenue gain: {revenue_gain(y_true, y_pred)} out of maximum revenue 465')
+
+    def test_model(self):
+        """
+        Train model on best model classifiers and test on test dataset
+        :return:
+        """
+        # load test dataset and transform
+        test_data = pd.read_pickle("../test_data/task_4_test_dd4bd32b08b776e6_daf99ad_pandas.pkl").reset_index()
+
+        test_features = test_data.loc[:, "essentia_dissonance_mean":]
+        test_features_std = StandardScaler().fit_transform(test_features)
+        test_features = pd.DataFrame(test_features_std, columns=test_features.columns)
+
+        # apply data transform to all the data
+        smote_enn = SMOTEENN(random_state=0)
+        X_all, y_all = smote_enn.fit_resample(self.X, self.y)
+        best_features = SelectKBest(score_func=f_classif, k=15).fit(X_all, y_all).get_feature_names_out()
+        X_all = X_all.drop(["segment_id"], axis=1)
+        X_all = X_all[best_features]
+
+        # predict labels
+        knn_ = KNeighborsClassifier(**self.model.best_params_).fit(X_all, y_all)
+        predicted = knn_.predict(test_features[best_features])
+
+        # create dataframe with results and save to csv
+        results = test_data.loc[:, "pianist_id":"snippet_id"]
+        results["quadrant"] = predicted.astype(int)
+
+        results.to_csv("results_knn.csv", index=False)
 
 
-# apply data transform to all the data
-X_all, y_all = smote_enn.fit_resample(X, y)
-best_features = SelectKBest(score_func=f_classif, k=15).fit(X_all, y_all).get_feature_names_out()
-X_all = X_all.drop(["segment_id"], axis=1)
-X_all = X_all[best_features]
+if __name__ == "__main__":
+    params = {"n_neighbors": [25, 50, 75, 100, 125],
+              "weights": ["uniform"],  # {‘uniform’, ‘distance’}
+              "algorithm": ["auto"],  # {‘auto’, ‘ball_tree’, ‘kd_tree’, ‘brute’}
+              "p": [1, 2, 3],
+              }
 
-# predict labels
-knn = KNeighborsClassifier(**gs_cv.best_params_).fit(X_all, y_all)
-predicted = knn.predict(test_features[best_features])
-
-# create dataframe with results and save to csv
-results = test_data.loc[:, "pianist_id":"snippet_id"]
-results["quadrant"] = predicted.astype(int)
-results.to_csv("results_knn.csv", index=False)
+    knn = KNN(params=params)
+    knn.train_model()
+    knn.test_model()
